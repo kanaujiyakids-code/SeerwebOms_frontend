@@ -130,15 +130,15 @@ export interface Order {
   retailerName: string;
   dealerId:     string;
   total:        number;
-  phone:        string;
-  address:      string;
+  retailerPhone:string;
+  retailerAddress: string;
   dealerCompanyName: string;
   dealerPhone: string;
   dealerAddress: string;
   notes:        string;
   status:       OrderStatus;
   createdAt:    string;
-  storeName:    string;
+  ledgerName:    string;
   order_by:     string;
   order_by_id:  number;
   items: {

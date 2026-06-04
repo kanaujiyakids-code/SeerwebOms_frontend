@@ -652,7 +652,7 @@ const DealerStaff = () => {
                           <div className="flex justify-between items-start">
                             <div>
                               <p className="font-medium">Order #{order.id.slice(-8)}</p>
-                              <p className="text-sm text-gray-500">{order.retailerName || order.storeName}</p>
+                              <p className="text-sm text-gray-500">{order.retailerName || order.ledgerName}</p>
                               <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}</p>
                             </div>
                             <div className="text-right">

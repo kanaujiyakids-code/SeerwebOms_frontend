@@ -142,7 +142,7 @@ const DealerOrders = () => {
       (order) =>
         order.id.toLowerCase().includes(lowerQuery) ||
         order.notes?.toLowerCase().includes(lowerQuery) ||
-        order.storeName?.toLowerCase().includes(lowerQuery) ||
+        order.ledgerName?.toLowerCase().includes(lowerQuery) ||
         order.total.toString().toLowerCase().includes(lowerQuery) ||
         order.retailerName?.toLowerCase().includes(lowerQuery)
     );

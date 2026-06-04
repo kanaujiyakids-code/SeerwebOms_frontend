@@ -112,26 +112,19 @@ const sortSizes = (sizes: string[]) =>
   });
 
 const resolveLinePricing = (item: OrderLineItem, preferLowerPriceAsRate: boolean): LinePricing => {
-  // Prefer explicit DB-backed values from backend response.
-  // Keep MRP and Rate strictly separate.
   const productMrp = Number(item.product?.mrp ?? 0);
   const productRate = Number(item.product?.rate ?? 0);
 
   const orderPrice = Number(item.price ?? 0);
   const productFallbackPrice = Number(item.product?.price ?? 0);
 
-  // Rate: product.rate if present and non-zero, else fallback to order/item price.
-  // Prefer DB-backed rate/mrp from backend response if they exist at line level.
   const lineRate = Number((item as any).rate ?? 0);
   const lineMrp = Number((item as any).mrp ?? 0);
 
   const rate = productRate > 0 ? productRate : (lineRate > 0 ? lineRate : (orderPrice || productFallbackPrice || 0));
 
-  // MRP: never derive from rate.
   const mrp = productMrp > 0 ? productMrp : (lineMrp > 0 ? lineMrp : (productFallbackPrice || orderPrice || 0));
 
-
-  // Keep legacy special-case, but never overwrite mrp=rate.
   if (preferLowerPriceAsRate && rate > 0 && productFallbackPrice > 0) {
     return { rate: Math.min(rate, productFallbackPrice), mrp };
   }
@@ -146,7 +139,6 @@ const getItemMeta = (item: OrderLineItem, preferLowerPriceAsRate: boolean) => {
   return {
     bookingType: snapshot.booking_type ?? garmentMeta.booking_type ?? "Current",
     designNo: snapshot.design_number ?? garmentMeta.design_number ?? garmentMeta.designNumber ?? "-",
-    // Do not let snapshots overwrite DB-backed MRP.
     mrp: pricing.mrp,
     rate: pricing.rate,
     setQuantity: Number(snapshot.set_quantity ?? 0),
@@ -366,7 +358,7 @@ const OrdersList: React.FC<OrdersListProps> = ({
         <body>
           <div class="sheet">
             <div class="brand">
-              <h1>INVOICE</h1>
+              <h1>SALES ORDER</h1>
               <p>Garments Wholesale Order Summary</p>
             </div>
 
@@ -374,9 +366,9 @@ const OrdersList: React.FC<OrdersListProps> = ({
               <div class="meta-card">
                 <div class="meta-title">Consignee Details</div>
                 <div class="meta-body">
-                  <div><strong>To:</strong> ${order.storeName || "-"}</div>
-                  <div><strong>Phone:</strong> ${order.phone || "-"}</div>
-                  <div><strong>Address:</strong> ${order.address || "-"}</div>
+                  <div><strong>To:</strong> ${order.ledgerName || "-"}</div>
+                  <div><strong>Phone:</strong> ${order.retailerPhone || "-"}</div>
+                  <div><strong>Address:</strong> ${order.retailerAddress || "-"}</div>
                 </div>
               </div>
               <div class="meta-card">
@@ -519,7 +511,6 @@ const OrdersList: React.FC<OrdersListProps> = ({
       );
     }
 
-
     if (activeTabForOrder !== "all") {
       filtered = filtered.filter((o) => o.status === activeTabForOrder);
     }
@@ -573,7 +564,7 @@ const OrdersList: React.FC<OrdersListProps> = ({
     const data = filteredOrders.map((o) => ({
       "Order ID": o.id,
       Retailer: o.retailerName,
-      "Store Name": o.storeName,
+      "Store Name": o.ledgerName,
       Total: o.total,
       Status: o.status,
       Date: new Date(o.createdAt).toLocaleDateString(),
@@ -765,7 +756,7 @@ const OrdersList: React.FC<OrdersListProps> = ({
                       </TableCell>
 
                       {isAdmin && <TableCell>{order.retailerName}</TableCell>}
-                      <TableCell>{order.storeName}</TableCell>
+                      <TableCell>{order.ledgerName}</TableCell>
                       <TableCell>
                         ₹{Number(order.total).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </TableCell>
@@ -830,7 +821,9 @@ const OrdersList: React.FC<OrdersListProps> = ({
                               View Details
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-6xl p-2">
+
+                          {/* ✅ FIX 1: Dialog width fits content, capped at 95vw */}
+                          <DialogContent className="w-fit max-w-[95vw] p-4">
                             <DialogHeader>
                               <DialogTitle>Order Details</DialogTitle>
                             </DialogHeader>
@@ -840,11 +833,16 @@ const OrdersList: React.FC<OrdersListProps> = ({
                                   Order #{String(selectedOrder.id).slice(0, 8)} -{" "}
                                   {new Date(selectedOrder.createdAt).toLocaleString()}
                                 </p>
-                                <div className="max-h-[60vh] overflow-auto rounded-xl border border-slate-200">
-                                  <div className="min-w-[980px]">
+
+                                {/* ✅ FIX 2: width fits content; scrolls if viewport is too narrow */}
+                                <div className="overflow-auto rounded-xl border border-slate-200" style={{ maxHeight: "60vh" }}>
+                                  <div className="w-fit min-w-full">
+                                    {/* Header row */}
                                     <div
-                                      className="grid gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600"
-                                      style={{ gridTemplateColumns: `56px 110px minmax(220px,1fr) 70px 110px 58px repeat(${selectedOrderGroups.allSizes.length}, minmax(66px, 1fr)) 88px 112px 112px` }}
+                                      className="grid gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600 sticky top-0 z-10"
+                                      style={{
+                                        gridTemplateColumns: `48px 100px minmax(200px,1fr) 62px 100px 52px repeat(${selectedOrderGroups.allSizes.length}, 72px) 80px 108px 108px`,
+                                      }}
                                     >
                                       <div className="bg-slate-50 px-3 py-3 text-center">Sr</div>
                                       <div className="bg-slate-50 px-3 py-3 text-center">Booking Type</div>
@@ -860,12 +858,15 @@ const OrdersList: React.FC<OrdersListProps> = ({
                                       <div className="bg-slate-50 px-3 py-3 text-center">MRP Total</div>
                                     </div>
 
+                                    {/* Body rows */}
                                     <div className="divide-y divide-slate-200">
                                       {selectedOrderGroups.groupedItems.map((group) => (
                                         <div
                                           key={group.key}
                                           className="grid gap-px bg-slate-200 text-sm"
-                                          style={{ gridTemplateColumns: `56px 110px minmax(220px,1fr) 70px 110px 58px repeat(${selectedOrderGroups.allSizes.length}, minmax(66px, 1fr)) 88px 112px 112px` }}
+                                          style={{
+                                            gridTemplateColumns: `48px 100px minmax(200px,1fr) 62px 100px 52px repeat(${selectedOrderGroups.allSizes.length}, 72px) 80px 108px 108px`,
+                                          }}
                                         >
                                           <div className="bg-white px-3 py-4 text-center font-medium">{group.srNo}</div>
                                           <div className="bg-white px-3 py-4 text-center">{group.bookingType}</div>
@@ -902,11 +903,17 @@ const OrdersList: React.FC<OrdersListProps> = ({
                                         </div>
                                       ))}
 
+                                      {/* Totals row */}
                                       <div
                                         className="grid gap-px bg-slate-200 text-sm font-semibold"
-                                        style={{ gridTemplateColumns: `56px 110px minmax(220px,1fr) 70px 110px 58px repeat(${selectedOrderGroups.allSizes.length}, minmax(66px, 1fr)) 88px 112px 112px` }}
+                                        style={{
+                                          gridTemplateColumns: `48px 100px minmax(200px,1fr) 62px 100px 52px repeat(${selectedOrderGroups.allSizes.length}, 72px) 80px 108px 108px`,
+                                        }}
                                       >
-                                        <div className="bg-slate-50 px-3 py-4 text-left" style={{ gridColumn: `1 / span ${6 + selectedOrderGroups.allSizes.length}` }}>
+                                        <div
+                                          className="bg-slate-50 px-3 py-4 text-left"
+                                          style={{ gridColumn: `1 / span ${6 + selectedOrderGroups.allSizes.length}` }}
+                                        >
                                           Total
                                         </div>
                                         <div className="bg-slate-50 px-3 py-4 text-center">{selectedOrderGroups.totals.totalQty}</div>
