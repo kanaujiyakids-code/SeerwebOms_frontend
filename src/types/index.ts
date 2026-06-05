@@ -29,7 +29,7 @@ export interface User {
 
 export interface Retailer extends User {
   contact_person:    string;
-  store_name:        string;
+  ledger_name:        string;
   phone:             string;
   address:           string;
   dealer_id:         string;

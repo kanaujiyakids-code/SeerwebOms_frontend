@@ -257,7 +257,7 @@ const Sidebar = ({
 
             {!collapsed && (
               <div>
-                <h1 className="text-sm font-semibold text-white">
+                <h1 className="text-sm font-semibold text-red-500">
                   SeerWeb OMS
                 </h1>
 

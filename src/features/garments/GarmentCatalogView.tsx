@@ -183,8 +183,9 @@ export function GarmentCatalogView({ products, title, subtitle }: GarmentCatalog
     const margin = 15;
     const contentWidth = pageWidth - 2 * margin;
     const contentHeight = pageHeight - 2 * margin;
-    const imageSectionHeight = contentHeight * 0.72;
-    const detailsSectionHeight = contentHeight * 0.28;
+    // ── KEY CHANGE: image gets 80% of height, details get 20% ──
+    const imageSectionHeight = contentHeight * 0.80;
+    const detailsSectionHeight = contentHeight * 0.20;
     const fileName = `${(user?.company_name || "Product").replace(/\s+/g, "-")}-Catalog.pdf`;
 
     pdfContainerRef.current.innerHTML = "";
@@ -219,7 +220,7 @@ export function GarmentCatalogView({ products, title, subtitle }: GarmentCatalog
       const tableHTML =
         sizes.length > 0
           ? `
-            <div style="width:100%;padding:4mm;background:#ffffff;border-radius:4mm;">
+            <div style="width:100%;background:#ffffff;">
               <div style="font-size:11pt;font-weight:700;margin-bottom:2mm;">Design No : ${designNo}</div>
               <table style="width:100%;border-collapse:collapse;font-size:10pt;text-align:center;">
                 <tr>
@@ -244,7 +245,7 @@ export function GarmentCatalogView({ products, title, subtitle }: GarmentCatalog
             </div>
           `
           : `
-            <div style="width:100%;padding:4mm;background:#ffffff;border-radius:4mm;">
+            <div style="width:100%;background:#ffffff;">
               <div style="font-size:11pt;font-weight:700;margin-bottom:2mm;">Model: ${product.name}</div>
               <table style="width:100%;border-collapse:collapse;font-size:10pt;text-align:center;">
                 <tr>
@@ -262,25 +263,55 @@ export function GarmentCatalogView({ products, title, subtitle }: GarmentCatalog
       const productDiv = document.createElement("div");
       productDiv.style.width = `${contentWidth}mm`;
       productDiv.style.height = `${contentHeight}mm`;
-      productDiv.style.background = "#fafbfc";
+      productDiv.style.background = "#ffffff";
       productDiv.style.fontFamily = "Arial, sans-serif";
       productDiv.style.color = "#1f2937";
       productDiv.style.display = "flex";
       productDiv.style.flexDirection = "column";
+      // ── Remove any gap between children ──
+      productDiv.style.gap = "0";
+
       productDiv.innerHTML = `
-        <div style="width:100%;height:${imageSectionHeight}mm;background:#ffffff;border-radius:0 0 8mm 8mm;position:relative;display:flex;align-items:center;justify-content:center;padding:10mm;overflow:hidden;">
+        <div style="
+          width:100%;
+          height:${imageSectionHeight}mm;
+          background:#ffffff;
+          position:relative;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding:6mm 8mm 0 8mm;
+          box-sizing:border-box;
+          overflow:hidden;
+          flex-shrink:0;
+        ">
           ${
             imgBase64
-              ? `<img src="${imgBase64}" style="max-width:${contentWidth * 0.82}mm;max-height:100%;object-fit:contain;" />`
+              ? `<img src="${imgBase64}" style="
+                  width:100%;
+                  height:100%;
+                  object-fit:contain;
+                " />`
               : `<div style="width:80mm;height:80mm;background:#e5e7eb;border-radius:8mm;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:12pt;border:2px dashed #cbd5e1;">No Image</div>`
           }
           <div style="position:absolute;top:4mm;right:4mm;background:rgba(255,255,255,0.88);padding:2mm 4mm;border-radius:2mm;font-size:10pt;font-weight:700;color:#2563eb;max-width:60%;text-align:right;">
             ${user?.company_name || ""}
           </div>
         </div>
-        <div style="width:100%;height:${detailsSectionHeight}mm;padding:8mm 12mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:flex-start;background:#ffffff;border-radius:8mm 8mm 0 0;">
-          <div style="text-align:center;margin-bottom:4mm;">
-            <h2 style="font-size:16pt;font-weight:700;color:#1f2937;margin:0 0 2mm 0;">${product.name}</h2>
+        <div style="
+          width:100%;
+          height:${detailsSectionHeight}mm;
+          padding:4mm 8mm;
+          box-sizing:border-box;
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
+          background:#ffffff;
+          flex-shrink:0;
+          border-top:1px solid #e5e7eb;
+        ">
+          <div style="text-align:center;margin-bottom:3mm;">
+            <h2 style="font-size:14pt;font-weight:700;color:#1f2937;margin:0;">${product.name}</h2>
           </div>
           ${tableHTML}
         </div>
@@ -307,7 +338,7 @@ export function GarmentCatalogView({ products, title, subtitle }: GarmentCatalog
         useCORS: true,
         allowTaint: false,
         logging: false,
-        backgroundColor: "#fafbfc",
+        backgroundColor: "#ffffff",
         imageTimeout: 3000,
       });
 

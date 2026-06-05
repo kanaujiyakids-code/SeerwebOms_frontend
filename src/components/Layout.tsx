@@ -1,9 +1,7 @@
 import React from "react";
-import Navbar from "./Navbar";
 import { useAuth } from "@/context/AuthContext";
 import { Navigate } from "react-router-dom";
-import '../assets/css/style.css'; // ✅ Relative import works
-
+import "../assets/css/style.css";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,16 +30,17 @@ const Layout: React.FC<LayoutProps> = ({
   }
 
   return (
-    <div className="responsive-bg" style={{ height: "100%", minHeight: "100vh", width: "100%" }}>
-      {/* <Navbar /> */}
+    <div className="relative isolate min-h-screen w-full overflow-x-hidden">
       <div
-        style={{
-          backgroundColor: "rgba(255, 255, 245, 0.75)",
-          minHeight: "100vh",
-        }}
-      >
-        {children}
-      </div>
+        aria-hidden="true"
+        className="fixed inset-0 -z-20 scale-105 bg-[url('/images/background.png')] bg-cover bg-center bg-no-repeat blur-[2px]"
+      />
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 -z-10 bg-gradient-to-br from-slate-50/90 via-white/80 to-blue-50/85 backdrop-blur-[1px]"
+      />
+
+      <div className="relative min-h-screen">{children}</div>
     </div>
   );
 };

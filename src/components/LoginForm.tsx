@@ -1,20 +1,17 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import logo from "../assets/images/react-logo.png";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 // Import icons
-import { Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 
 const LoginForm = () => {
   const [username, setUsername] = useState("");
@@ -48,24 +45,33 @@ const LoginForm = () => {
   };
 
   return (
-    <Card className="overflow-hidden border-white/10 bg-white text-slate-900 shadow-2xl shadow-black/25">
-      <div className="h-1.5 bg-gradient-to-r from-royal via-blue-500 to-cyan-400" />
-      <CardHeader className="space-y-4 p-6 pb-5 sm:p-8 sm:pb-6">
-
-        <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+    <Card className="overflow-hidden rounded-3xl border border-white/25 bg-white/18 text-white shadow-2xl shadow-slate-950/35 backdrop-blur-2xl">
+      <div className="h-px bg-gradient-to-r from-transparent via-white/70 to-transparent" />
+      <CardHeader className="space-y-5 p-6 pb-4 sm:p-8 sm:pb-5">
+        <div className="flex items-center gap-2 rounded-full border border-white/25 bg-white/15 px-4 py-2 text-sm font-medium text-white shadow-inner shadow-white/10 backdrop-blur-xl">
           <ShieldCheck className="h-4 w-4 shrink-0" />
           <span>Secure login for authorized users</span>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase text-blue-100/80">
+            Welcome back
+          </p>
+          <h2 className="text-2xl font-semibold leading-tight text-white sm:text-3xl">
+            Login to your workspace
+          </h2>
+          <p className="text-sm leading-6 text-slate-100/75">
+            Enter your credentials to continue managing orders, accounts, and
+            business operations.
+          </p>
         </div>
       </CardHeader>
 
       <CardContent className="p-6 pt-0 sm:px-8">
         <form onSubmit={handleSubmit} className="space-y-5">
-          
-
           <div className="space-y-2">
             <label
               htmlFor="username"
-              className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700"
+              className="text-sm font-semibold uppercase text-blue-50/85"
             >
               Username
             </label>
@@ -75,14 +81,14 @@ const LoginForm = () => {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={isLoading}
-              className="h-12 rounded-xl border-slate-200 bg-white px-4 text-slate-900 shadow-sm focus-visible:ring-royal"
+              className="h-10 rounded-xl border-white/25 bg-white/18 px-4 text-black shadow-inner shadow-white/5 placeholder:text-slate-100/55 focus-visible:border-white/50 focus-visible:ring-2 focus-visible:ring-white/35"
             />
           </div>
 
           <div className="space-y-2">
             <label
               htmlFor="password"
-              className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-700"
+              className="text-sm font-semibold uppercase text-blue-50/85"
             >
               Password
             </label>
@@ -94,12 +100,12 @@ const LoginForm = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
-                className="h-12 rounded-xl border-slate-200 bg-white px-4 pr-11 text-slate-900 shadow-sm focus-visible:ring-royal"
+                className="h-10 rounded-xl border-white/25 bg-white/18 px-4 pr-11 text-black shadow-inner shadow-white/5 placeholder:text-slate-100/55 focus-visible:border-white/50 focus-visible:ring-2 focus-visible:ring-white/35"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute inset-y-0 right-3 flex items-center text-slate-400 transition-colors hover:text-slate-700"
+                className="absolute inset-y-0 right-3 flex items-center text-slate-100/65 transition-colors hover:text-white"
                 tabIndex={-1}
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
@@ -111,20 +117,14 @@ const LoginForm = () => {
           <Button
             type="submit"
             disabled={isLoading}
-            className="h-12 w-full rounded-xl bg-slate-950 text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800"
+            className="h-12 w-full rounded-2xl border border-white/20 bg-gradient-to-r from-royal via-blue-500 to-cyan-500 text-sm font-semibold text-white shadow-xl shadow-blue-950/25 transition hover:from-royal-dark hover:via-blue-600 hover:to-cyan-600 focus-visible:ring-2 focus-visible:ring-white/45 disabled:opacity-70"
           >
             {isLoading ? "Signing in..." : "Login to Seerweb OMS"}
           </Button>
         </form>
       </CardContent>
 
-      <CardFooter className="flex flex-col items-start gap-2 border-t border-slate-100 bg-slate-50/70 p-6 text-xs text-slate-500 sm:px-8">
-        <p className="font-medium text-slate-700">Enterprise Software Expertise</p>
-        <p>
-          TallyPrime, ERP implementation, customization, integration, and business
-          software support.
-        </p>
-      </CardFooter>
+     
     </Card>
   );
 };

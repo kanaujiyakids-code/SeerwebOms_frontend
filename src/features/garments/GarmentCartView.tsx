@@ -157,7 +157,7 @@ export function GarmentCartView() {
         <div className="border-b border-slate-200 px-4 sm:px-6 py-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Shopping Cart</h1>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">Order Summary</h1>
               <p className="mt-1 text-sm text-slate-500">
                 Review product details, update size quantities, and confirm the garment booking summary.
               </p>
@@ -392,29 +392,7 @@ export function GarmentCartView() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full rounded-2xl text-sm"
-              onClick={() => window.print()}
-            >
-              <Printer size={15} className="mr-2" />
-              Print Invoice
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full rounded-2xl text-sm"
-              onClick={() => {
-                const text = encodeURIComponent(`Garments booking total: ${formatCurrency(summary.finalAmount)}`);
-                window.open(`https://wa.me/?text=${text}`, "_blank");
-              }}
-            >
-              <MessageCircle size={15} className="mr-2" />
-              Share Via WhatsApp
-            </Button>
-          </div>
+          
         </div>
       </aside>
     </div>

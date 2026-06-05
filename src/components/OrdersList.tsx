@@ -33,6 +33,7 @@ import {
   Printer,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { isGarmentsBusiness, isMobileBusiness } from "@/lib/businessType";
 import * as XLSX from "xlsx";
 import { Input } from "@/components/ui/input";
 
@@ -41,8 +42,8 @@ interface OrdersListProps {
   isAdmin?: boolean;
   onStatusChange?: (orderId: string, status: OrderStatus) => void;
   highlightNew?: boolean;
-  retailers:Retailer[];
-  staff:Staff[];
+  retailers: Retailer[];
+  staff: Staff[];
 }
 
 type OrderLineItem = Order["items"][number];
@@ -73,6 +74,21 @@ interface LinePricing {
   mrp: number;
 }
 
+interface MobileOrderItem {
+  key: string;
+  srNo: number;
+  description: string;
+  brand: string;
+  model: string;
+  color: string;
+  rack: string;
+  qty: number;
+  rate: number;
+  mrp: number;
+  rateAmount: number;
+  mrpAmount: number;
+}
+
 const SIZE_PRIORITY = [
   "XS", "S", "M", "L", "XL", "XXL", "2XL", "3XL", "4XL", "5XL",
   "28", "30", "32", "34", "36", "38", "40", "42", "44", "46",
@@ -101,34 +117,26 @@ const sortSizes = (sizes: string[]) =>
     if (leftRank !== undefined || rightRank !== undefined) {
       return (leftRank ?? Number.MAX_SAFE_INTEGER) - (rightRank ?? Number.MAX_SAFE_INTEGER);
     }
-
     const leftNumber = Number(left);
     const rightNumber = Number(right);
     if (!Number.isNaN(leftNumber) && !Number.isNaN(rightNumber)) {
       return leftNumber - rightNumber;
     }
-
     return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
   });
 
 const resolveLinePricing = (item: OrderLineItem, preferLowerPriceAsRate: boolean): LinePricing => {
   const productMrp = Number(item.product?.mrp ?? 0);
   const productRate = Number(item.product?.rate ?? 0);
-
   const orderPrice = Number(item.price ?? 0);
   const productFallbackPrice = Number(item.product?.price ?? 0);
-
   const lineRate = Number((item as any).rate ?? 0);
   const lineMrp = Number((item as any).mrp ?? 0);
-
   const rate = productRate > 0 ? productRate : (lineRate > 0 ? lineRate : (orderPrice || productFallbackPrice || 0));
-
   const mrp = productMrp > 0 ? productMrp : (lineMrp > 0 ? lineMrp : (productFallbackPrice || orderPrice || 0));
-
   if (preferLowerPriceAsRate && rate > 0 && productFallbackPrice > 0) {
     return { rate: Math.min(rate, productFallbackPrice), mrp };
   }
-
   return { rate, mrp };
 };
 
@@ -144,6 +152,52 @@ const getItemMeta = (item: OrderLineItem, preferLowerPriceAsRate: boolean) => {
     setQuantity: Number(snapshot.set_quantity ?? 0),
     color: item.color ?? garmentMeta.selectedColor ?? snapshot.color ?? "",
   };
+};
+
+const getSnapshotValue = (snapshot: Record<string, any>, keys: string[]) => {
+  for (const key of keys) {
+    const value = snapshot[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return String(value);
+    }
+  }
+  return "";
+};
+
+const getMobileOrderItems = (order: Order, preferLowerPriceAsRate = false) => {
+  const items = order.items.map((item, index) => {
+    const snapshot = item.attributes_snapshot ?? {};
+    const pricing = resolveLinePricing(item, preferLowerPriceAsRate);
+    const qty = Number(item.quantity || 0);
+    const rate = Number(pricing.rate || item.price || item.product?.price || 0);
+    const mrp = Number(pricing.mrp || rate);
+
+    return {
+      key: `${item.productId}-${item.variantId ?? index}-${index}`,
+      srNo: index + 1,
+      description: item.product?.name || "Product",
+      brand: getSnapshotValue(snapshot, ["brand", "Brand"]),
+      model: getSnapshotValue(snapshot, ["model", "Model"]),
+      color: item.color || getSnapshotValue(snapshot, ["color", "Color"]),
+      rack: item.rack || getSnapshotValue(snapshot, ["rack", "rack_number", "Rack"]),
+      qty,
+      rate,
+      mrp,
+      rateAmount: rate * qty,
+      mrpAmount: mrp * qty,
+    };
+  });
+
+  const totals = items.reduce(
+    (accumulator, item) => ({
+      totalQty: accumulator.totalQty + item.qty,
+      totalRateAmount: accumulator.totalRateAmount + item.rateAmount,
+      totalMrpAmount: accumulator.totalMrpAmount + item.mrpAmount,
+    }),
+    { totalQty: 0, totalRateAmount: 0, totalMrpAmount: 0 }
+  );
+
+  return { items, totals };
 };
 
 const groupOrderItems = (order: Order, preferLowerPriceAsRate = false) => {
@@ -170,7 +224,7 @@ const groupOrderItems = (order: Order, preferLowerPriceAsRate = false) => {
         bookingType: meta.bookingType,
         description,
         designNo: meta.designNo,
-        setPcs: meta.setQuantity > 0 ? 1 : 0,
+        setPcs: meta.setQuantity,
         color: meta.color,
         sizes: [],
         totalQty: 0,
@@ -198,9 +252,7 @@ const groupOrderItems = (order: Order, preferLowerPriceAsRate = false) => {
     group.totalQty += Number(item.quantity || 0);
     group.totalRateAmount += rate * Number(item.quantity || 0);
     group.totalMrpAmount += mrp * Number(item.quantity || 0);
-    if (meta.setQuantity > 0) {
-      group.setPcs = 1;
-    }
+    group.setPcs = Math.max(group.setPcs, meta.setQuantity);
   });
 
   const groupedItems = Array.from(groups.values()).map((group) => ({
@@ -232,10 +284,12 @@ const OrdersList: React.FC<OrdersListProps> = ({
   onStatusChange,
   highlightNew = false,
   retailers,
-  staff
+  staff,
 }) => {
   const { user } = useAuth();
-  const preferLowerPriceAsRate = Number(user?.business_type_id) === 2;
+  const isMobileModule = isMobileBusiness(user?.business_type_id);
+  const isGarmentModule = isGarmentsBusiness(user?.business_type_id);
+  const preferLowerPriceAsRate = isGarmentModule;
 
   const [localOrders, setLocalOrders] = useState<Order[]>(orders);
   const [filteredOrders, setFilteredOrders] = useState<Order[]>(orders);
@@ -257,12 +311,162 @@ const OrdersList: React.FC<OrdersListProps> = ({
     () => (selectedOrder ? groupOrderItems(selectedOrder, preferLowerPriceAsRate) : null),
     [preferLowerPriceAsRate, selectedOrder]
   );
-  
+  const selectedOrderMobileItems = useMemo(
+    () => (selectedOrder ? getMobileOrderItems(selectedOrder, preferLowerPriceAsRate) : null),
+    [preferLowerPriceAsRate, selectedOrder]
+  );
+
   const handlePrintInvoice = (order: Order) => {
     const invoiceWindow = window.open("", "_blank", "width=1200,height=900");
     if (!invoiceWindow) return;
 
     const orderDate = new Date(order.createdAt);
+    const commonMetaHtml = `
+      <div class="meta-grid">
+        <div class="meta-card">
+          <div class="meta-title">Consignee Details</div>
+          <div class="meta-body">
+            <div><strong>To:</strong> ${escapeHtml(order.ledgerName || "-")}</div>
+            <div><strong>Phone:</strong> ${escapeHtml(order.retailerPhone || "-")}</div>
+            <div><strong>Address:</strong> ${escapeHtml(order.retailerAddress || "-")}</div>
+          </div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-title">Party Details</div>
+          <div class="meta-body">
+            <div><strong>Sale By:</strong> ${escapeHtml(order.dealerCompanyName || "-")}</div>
+            <div><strong>Phone:</strong> ${escapeHtml(order.dealerPhone ?? "-")}</div>
+            <div><strong>Address:</strong> ${escapeHtml(order.dealerAddress || "-")}</div>
+          </div>
+        </div>
+        <div class="meta-card">
+          <div class="meta-title">Order Details</div>
+          <div class="meta-body">
+            <div><strong>Order No:</strong> ${escapeHtml(String(order.id).slice(0, 8))}</div>
+            <div><strong>Order Date:</strong> ${orderDate.toLocaleDateString("en-IN")}</div>
+            <div><strong>Order Time:</strong> ${orderDate.toLocaleTimeString("en-IN")}</div>
+          </div>
+        </div>
+      </div>
+      <div class="remark"><strong>Remark:</strong> ${escapeHtml(order.notes || "No notes added")}</div>
+    `;
+
+    if (isMobileModule) {
+      const { items, totals } = getMobileOrderItems(order, preferLowerPriceAsRate);
+      const rows = items
+        .map(
+          (item) => `
+            <tr>
+              <td>${item.srNo}</td>
+              <td class="left">
+                <div class="desc-name">${escapeHtml(item.description)}</div>
+                ${item.color ? `<div class="desc-sub">Color: ${escapeHtml(item.color)}</div>` : ""}
+              </td>
+              <td>${escapeHtml(item.brand || "-")}</td>
+              <td>${escapeHtml(item.model || "-")}</td>
+              <td>${escapeHtml(item.rack || "-")}</td>
+              <td>${item.qty}</td>
+              <td>Rs.${formatMoney(item.rate)}</td>
+              <td>Rs.${formatMoney(item.mrp)}</td>
+              <td>Rs.${formatMoney(item.rateAmount)}</td>
+              <td>Rs.${formatMoney(item.mrpAmount)}</td>
+            </tr>
+          `
+        )
+        .join("");
+
+      invoiceWindow.document.write(`
+        <html>
+          <head>
+            <title>Invoice ${escapeHtml(order.id)}</title>
+            <style>
+              @page { size: A4 portrait; margin: 10mm; }
+              body { font-family: Arial, sans-serif; color: #111827; margin: 0; padding: 12px; }
+              .sheet { border: 2px solid #111827; padding: 12px; }
+              .brand { text-align: center; margin-bottom: 16px; }
+              .brand h1 { margin: 0; font-size: 28px; letter-spacing: 0.08em; }
+              .brand p { margin: 4px 0 0; font-size: 13px; color: #475569; }
+              .meta-grid { display: grid; grid-template-columns: 1.2fr 1.2fr 1fr; border: 2px solid #111827; border-bottom: 0; }
+              .meta-card { min-height: 120px; border-right: 2px solid #111827; }
+              .meta-card:last-child { border-right: 0; }
+              .meta-title { background: #111827; color: white; padding: 8px 10px; font-weight: 700; font-size: 18px; }
+              .meta-body { padding: 10px; font-size: 14px; line-height: 1.6; }
+              .remark { border: 2px solid #111827; border-top: 0; padding: 10px; font-size: 14px; margin-bottom: 18px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+              thead { display: table-header-group; }
+              tr { page-break-inside: avoid; }
+              th, td { border: 1px solid #111827; padding: 7px; font-size: 12px; vertical-align: top; text-align: center; }
+              th { background: #f8fafc; text-transform: uppercase; letter-spacing: 0.04em; }
+              .left { text-align: left; }
+              .desc-name { font-weight: 700; text-align: left; }
+              .desc-sub { margin-top: 4px; font-size: 11px; color: #475569; text-align: left; }
+              .total-row td { font-weight: 700; background: #f8fafc; }
+              .summary { display: grid; grid-template-columns: 1.3fr 1fr; border: 2px solid #111827; }
+              .terms { padding: 12px; border-right: 2px solid #111827; min-height: 130px; }
+              .totals { padding: 12px; }
+              .totals p { margin: 0 0 10px; font-size: 16px; font-weight: 700; }
+              .small { font-size: 12px; color: #475569; line-height: 1.5; }
+              @media print { body { padding: 0; } .sheet { border-width: 1px; } }
+            </style>
+          </head>
+          <body>
+            <div class="sheet">
+              <div class="brand">
+                <h1>SALES ORDER</h1>
+                <p>Mobile Product Order Summary</p>
+              </div>
+              ${commonMetaHtml}
+              <table>
+                <thead>
+                  <tr>
+                    <th>Sr</th>
+                    <th>Product</th>
+                    <th>Brand</th>
+                    <th>Model</th>
+                    <th>Rack</th>
+                    <th>Qty</th>
+                    <th>Rate</th>
+                    <th>MRP</th>
+                    <th>Rate Total</th>
+                    <th>MRP Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows}
+                  <tr class="total-row">
+                    <td colspan="5" class="left">Total</td>
+                    <td>${totals.totalQty}</td>
+                    <td></td>
+                    <td></td>
+                    <td>Rs.${formatMoney(totals.totalRateAmount)}</td>
+                    <td>Rs.${formatMoney(totals.totalMrpAmount)}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="summary">
+                <div class="terms">
+                  <div style="font-weight:700; margin-bottom:8px;">Terms & Conditions</div>
+                  <div class="small">
+                    Please verify product model, quantity, rate, and dispatch details before accepting delivery.
+                    Warranty, replacement, and payment terms follow the seller's mobile distribution policy.
+                  </div>
+                </div>
+                <div class="totals">
+                  <p>Total Order QTY: ${totals.totalQty}</p>
+                  <p>Total Rate: Rs.${formatMoney(totals.totalRateAmount)}</p>
+                  <p>Total MRP: Rs.${formatMoney(totals.totalMrpAmount)}</p>
+                </div>
+              </div>
+            </div>
+          </body>
+        </html>
+      `);
+      invoiceWindow.document.close();
+      invoiceWindow.focus();
+      invoiceWindow.print();
+      return;
+    }
+
     const { groupedItems, allSizes, totals } = groupOrderItems(order, preferLowerPriceAsRate);
     const sizeColumns = allSizes
       .map((size) => `<th>${escapeHtml(size)}</th>`)
@@ -275,7 +479,6 @@ const OrdersList: React.FC<OrdersListProps> = ({
             if (!line) {
               return `<td class="size-cell empty"></td>`;
             }
-
             return `
               <td class="size-cell">
                 <div class="metric qty-value">${line.qty}</div>
@@ -362,34 +565,7 @@ const OrdersList: React.FC<OrdersListProps> = ({
               <p>Garments Wholesale Order Summary</p>
             </div>
 
-            <div class="meta-grid">
-              <div class="meta-card">
-                <div class="meta-title">Consignee Details</div>
-                <div class="meta-body">
-                  <div><strong>To:</strong> ${order.ledgerName || "-"}</div>
-                  <div><strong>Phone:</strong> ${order.retailerPhone || "-"}</div>
-                  <div><strong>Address:</strong> ${order.retailerAddress || "-"}</div>
-                </div>
-              </div>
-              <div class="meta-card">
-                <div class="meta-title">Party Details</div>
-                <div class="meta-body">
-                  <div><strong>Sale By:</strong> ${order.dealerCompanyName || "-"}</div>
-                  <div><strong>Phone:</strong> ${order.dealerPhone ?? "-"}</div>
-                  <div><strong>Address:</strong> ${order.dealerAddress}</div>
-                </div>
-              </div>
-              <div class="meta-card">
-                <div class="meta-title">Order Details</div>
-                <div class="meta-body">
-                  <div><strong>Order No:</strong> ${String(order.id).slice(0, 8)}</div>
-                  <div><strong>Order Date:</strong> ${orderDate.toLocaleDateString("en-IN")}</div>
-                  <div><strong>Order Time:</strong> ${orderDate.toLocaleTimeString("en-IN")}</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="remark"><strong>Remark:</strong> ${order.notes || "No notes added"}</div>
+            ${commonMetaHtml}
 
             <div class="table-wrap">
             <table>
@@ -519,7 +695,6 @@ const OrdersList: React.FC<OrdersListProps> = ({
     setPage(1);
   }, [localOrders, dateFilter, fromDate, toDate, reportRetailerId, reportStaffId, activeTabForOrder]);
 
-
   // Sorting + Pagination
   const sortedFiltered = useMemo(() => {
     const sorted = [...filteredOrders].sort((a, b) => {
@@ -581,6 +756,10 @@ const OrdersList: React.FC<OrdersListProps> = ({
     );
     if (onStatusChange) onStatusChange(orderId, newStatus);
   };
+
+  // Shared grid template — all fixed widths, no stretching
+  const gridCols = (sizeCount: number) =>
+    `32px 80px 200px 46px 80px 42px repeat(${sizeCount}, 58px) 52px 88px 88px`;
 
   return (
     <div>
@@ -648,26 +827,25 @@ const OrdersList: React.FC<OrdersListProps> = ({
 
         {user?.role == "dealer" && (
           <div>
-              <label className="text-gray-700 font-semibold mb-1">Sales Executive</label>
-              <Select
-                value={reportStaffId}
-                onValueChange={(value) => setReportStaffId(value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select Retailer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Staff</SelectItem>
-                  {staff.map((r) => (
-                    <SelectItem key={r.id} value={String(r.id)}>
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <label className="text-gray-700 font-semibold mb-1">Sales Executive</label>
+            <Select
+              value={reportStaffId}
+              onValueChange={(value) => setReportStaffId(value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select Retailer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Staff</SelectItem>
+                {staff.map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         )}
-
       </div>
 
       {/* Table Section */}
@@ -703,9 +881,7 @@ const OrdersList: React.FC<OrdersListProps> = ({
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                setSortOrder(sortOrder === "asc" ? "desc" : "asc")
-              }
+              onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
             >
               <ArrowUpDown className="w-4 h-4 mr-1" />
               Sort {sortOrder === "asc" ? "↑" : "↓"}
@@ -758,7 +934,10 @@ const OrdersList: React.FC<OrdersListProps> = ({
                       {isAdmin && <TableCell>{order.retailerName}</TableCell>}
                       <TableCell>{order.ledgerName}</TableCell>
                       <TableCell>
-                        ₹{Number(order.total).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ₹{Number(order.total).toLocaleString("en-IN", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </TableCell>
 
                       <TableCell>
@@ -790,13 +969,10 @@ const OrdersList: React.FC<OrdersListProps> = ({
                           </span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {order.notes}
-                      </TableCell>
+                      <TableCell>{order.notes}</TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span>{new Date(order.createdAt).toLocaleDateString("en-IN")}</span>
-                          
                           <span className="text-sm text-gray-500">
                             {new Date(order.createdAt).toLocaleTimeString("en-IN", {
                               hour: "2-digit",
@@ -807,9 +983,7 @@ const OrdersList: React.FC<OrdersListProps> = ({
                           </span>
                         </div>
                       </TableCell>
-                      {isAdmin && <TableCell>
-                        {order.order_by}
-                      </TableCell>}
+                      {isAdmin && <TableCell>{order.order_by}</TableCell>}
                       <TableCell>
                         <Dialog>
                           <DialogTrigger asChild>
@@ -822,40 +996,145 @@ const OrdersList: React.FC<OrdersListProps> = ({
                             </Button>
                           </DialogTrigger>
 
-                          {/* ✅ FIX 1: Dialog width fits content, capped at 95vw */}
-                          <DialogContent className="w-fit max-w-[95vw] p-4">
+                          <DialogContent className="max-w-[95vw] w-fit min-w-[400px] p-2">
                             <DialogHeader>
                               <DialogTitle>Order Details</DialogTitle>
                             </DialogHeader>
-                            {selectedOrder && selectedOrder.id === order.id && selectedOrderGroups && (
+                            {selectedOrder && selectedOrder.id === order.id && (
                               <div className="mt-4 space-y-4">
                                 <p className="text-sm text-muted-foreground">
                                   Order #{String(selectedOrder.id).slice(0, 8)} -{" "}
                                   {new Date(selectedOrder.createdAt).toLocaleString()}
                                 </p>
 
-                                {/* ✅ FIX 2: width fits content; scrolls if viewport is too narrow */}
-                                <div className="overflow-auto rounded-xl border border-slate-200" style={{ maxHeight: "60vh" }}>
-                                  <div className="w-fit min-w-full">
+                                {isMobileModule && selectedOrderMobileItems ? (
+                                  <>
+                                    <div
+                                      className="overflow-auto rounded-xl border border-slate-200"
+                                      style={{ maxHeight: "60vh", maxWidth: "calc(95vw - 16px)" }}
+                                    >
+                                      <Table>
+                                        <TableHeader className="sticky top-0 z-10 bg-slate-50">
+                                          <TableRow>
+                                            <TableHead className="w-12">Sr</TableHead>
+                                            <TableHead className="min-w-[220px]">Product</TableHead>
+                                            <TableHead>Brand</TableHead>
+                                            <TableHead>Model</TableHead>
+                                            <TableHead>Rack</TableHead>
+                                            <TableHead className="text-center">Qty</TableHead>
+                                            <TableHead className="text-right">Rate</TableHead>
+                                            <TableHead className="text-right">MRP</TableHead>
+                                            <TableHead className="text-right">Rate Total</TableHead>
+                                            <TableHead className="text-right">MRP Total</TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {selectedOrderMobileItems.items.map((item) => (
+                                            <TableRow key={item.key}>
+                                              <TableCell className="font-medium">{item.srNo}</TableCell>
+                                              <TableCell>
+                                                <div className="font-semibold text-slate-900">
+                                                  {item.description}
+                                                </div>
+                                                {item.color ? (
+                                                  <div className="mt-1 text-xs text-slate-500">
+                                                    Color: {item.color}
+                                                  </div>
+                                                ) : null}
+                                              </TableCell>
+                                              <TableCell>{item.brand || "-"}</TableCell>
+                                              <TableCell>{item.model || "-"}</TableCell>
+                                              <TableCell>{item.rack || "-"}</TableCell>
+                                              <TableCell className="text-center font-semibold">{item.qty}</TableCell>
+                                              <TableCell className="text-right">{formatMoney(item.rate)}</TableCell>
+                                              <TableCell className="text-right">{formatMoney(item.mrp)}</TableCell>
+                                              <TableCell className="text-right font-semibold">
+                                                {formatMoney(item.rateAmount)}
+                                              </TableCell>
+                                              <TableCell className="text-right font-semibold">
+                                                {formatMoney(item.mrpAmount)}
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+                                          <TableRow className="bg-slate-50 font-semibold">
+                                            <TableCell colSpan={5}>Total</TableCell>
+                                            <TableCell className="text-center">
+                                              {selectedOrderMobileItems.totals.totalQty}
+                                            </TableCell>
+                                            <TableCell />
+                                            <TableCell />
+                                            <TableCell className="text-right">
+                                              {formatMoney(selectedOrderMobileItems.totals.totalRateAmount)}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                              {formatMoney(selectedOrderMobileItems.totals.totalMrpAmount)}
+                                            </TableCell>
+                                          </TableRow>
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+
+                                    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                                      <div className="space-y-1">
+                                        <div>
+                                          Total Qty:{" "}
+                                          <span className="font-semibold text-slate-900">
+                                            {selectedOrderMobileItems.totals.totalQty}
+                                          </span>
+                                        </div>
+                                        <div>
+                                          Total Rate Amount:{" "}
+                                          <span className="font-semibold text-slate-900">
+                                            Rs.{formatMoney(selectedOrderMobileItems.totals.totalRateAmount)}
+                                          </span>
+                                        </div>
+                                        <div>
+                                          Total MRP Amount:{" "}
+                                          <span className="font-semibold text-slate-900">
+                                            Rs.{formatMoney(selectedOrderMobileItems.totals.totalMrpAmount)}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="shrink-0"
+                                        onClick={() => handlePrintInvoice(selectedOrder)}
+                                      >
+                                        <Printer className="mr-2 h-4 w-4" />
+                                        Print Invoice
+                                      </Button>
+                                    </div>
+                                  </>
+                                ) : selectedOrderGroups ? (
+                                  <>
+                                {/* ── Dialog table: tight padding, compact columns ── */}
+                                <div
+                                  className="overflow-auto rounded-xl border border-slate-200"
+                                  style={{ maxHeight: "60vh", maxWidth: "calc(95vw - 16px)" }}
+                                >
+                                  <div className="w-fit">
                                     {/* Header row */}
                                     <div
-                                      className="grid gap-px bg-slate-200 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-600 sticky top-0 z-10"
+                                      className="grid gap-px bg-slate-200 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-600 sticky top-0 z-10"
                                       style={{
-                                        gridTemplateColumns: `48px 100px minmax(200px,1fr) 62px 100px 52px repeat(${selectedOrderGroups.allSizes.length}, 72px) 80px 108px 108px`,
+                                        gridTemplateColumns: gridCols(selectedOrderGroups.allSizes.length),
                                       }}
                                     >
-                                      <div className="bg-slate-50 px-3 py-3 text-center">Sr</div>
-                                      <div className="bg-slate-50 px-3 py-3 text-center">Booking Type</div>
-                                      <div className="bg-slate-50 px-3 py-3">Description</div>
-                                      <div className="bg-slate-50 px-3 py-3 text-center">Set pcs</div>
-                                      <div className="bg-slate-50 px-3 py-3 text-center">Design No</div>
-                                      <div className="bg-slate-50 px-3 py-3 text-center">#</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">Sr</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">Booking</div>
+                                      <div className="bg-slate-50 px-1 py-2">Description</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">Set</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">Design No</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">#</div>
                                       {selectedOrderGroups.allSizes.map((size) => (
-                                        <div key={size} className="bg-slate-50 px-2 py-3 text-center">{size}</div>
+                                        <div key={size} className="bg-slate-50 px-1 py-2 text-center">
+                                          {size}
+                                        </div>
                                       ))}
-                                      <div className="bg-slate-50 px-3 py-3 text-center">Qty</div>
-                                      <div className="bg-slate-50 px-3 py-3 text-center">Rate Total</div>
-                                      <div className="bg-slate-50 px-3 py-3 text-center">MRP Total</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">Qty</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">Rate Total</div>
+                                      <div className="bg-slate-50 px-1 py-2 text-center">MRP Total</div>
                                     </div>
 
                                     {/* Body rows */}
@@ -863,33 +1142,58 @@ const OrdersList: React.FC<OrdersListProps> = ({
                                       {selectedOrderGroups.groupedItems.map((group) => (
                                         <div
                                           key={group.key}
-                                          className="grid gap-px bg-slate-200 text-sm"
+                                          className="grid gap-px bg-slate-200 text-xs"
                                           style={{
-                                            gridTemplateColumns: `48px 100px minmax(200px,1fr) 62px 100px 52px repeat(${selectedOrderGroups.allSizes.length}, 72px) 80px 108px 108px`,
+                                            gridTemplateColumns: gridCols(selectedOrderGroups.allSizes.length),
                                           }}
                                         >
-                                          <div className="bg-white px-3 py-4 text-center font-medium">{group.srNo}</div>
-                                          <div className="bg-white px-3 py-4 text-center">{group.bookingType}</div>
-                                          <div className="bg-white px-3 py-4">
-                                            <div className="font-semibold text-slate-900">{group.description}</div>
-                                            {group.color ? <div className="mt-1 text-xs text-slate-500">{group.color}</div> : null}
+                                          <div className="bg-white px-1 py-3 text-center font-medium">
+                                            {group.srNo}
                                           </div>
-                                          <div className="bg-white px-3 py-4 text-center">{group.setPcs || "-"}</div>
-                                          <div className="bg-white px-3 py-4 text-center">{group.designNo}</div>
-                                          <div className="bg-white px-2 py-4 text-[11px] font-semibold leading-6">
+                                          <div className="bg-white px-1 py-3 text-center">
+                                            {group.bookingType}
+                                          </div>
+                                          <div className="bg-white px-1 py-3">
+                                            <div className="font-semibold text-slate-900 leading-tight">
+                                              {group.description}
+                                            </div>
+                                            {group.color ? (
+                                              <div className="mt-0.5 text-[10px] text-slate-500">
+                                                {group.color}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                          <div className="bg-white px-1 py-3 text-center">
+                                            {group.setPcs || "-"}
+                                          </div>
+                                          <div className="bg-white px-1 py-3 text-center">
+                                            {group.designNo}
+                                          </div>
+                                          {/* Label column */}
+                                          <div className="bg-white px-1 py-3 text-[10px] font-semibold leading-5">
                                             <div className="text-red-500">Qty</div>
                                             <div className="text-emerald-600">Rate</div>
                                             <div className="text-blue-600">MRP</div>
                                           </div>
+                                          {/* Size value columns */}
                                           {selectedOrderGroups.allSizes.map((size) => {
                                             const line = group.sizes.find((entry) => entry.size === size);
                                             return (
-                                              <div key={`${group.key}-${size}`} className="bg-white px-2 py-4 text-center text-[11px] leading-6">
+                                              <div
+                                                key={`${group.key}-${size}`}
+                                                className="bg-white px-1 py-3 text-center text-[10px] leading-5"
+                                              >
                                                 {line ? (
                                                   <>
-                                                    <div className="font-semibold text-red-500">{line.qty}</div>
-                                                    <div className="font-medium text-emerald-600">{formatMoney(line.rate)}</div>
-                                                    <div className="font-medium text-blue-600">{formatMoney(line.mrp)}</div>
+                                                    <div className="font-semibold text-red-500">
+                                                      {line.qty}
+                                                    </div>
+                                                    <div className="font-medium text-emerald-600">
+                                                      {formatMoney(line.rate)}
+                                                    </div>
+                                                    <div className="font-medium text-blue-600">
+                                                      {formatMoney(line.mrp)}
+                                                    </div>
                                                   </>
                                                 ) : (
                                                   <div className="text-slate-300">-</div>
@@ -897,38 +1201,68 @@ const OrdersList: React.FC<OrdersListProps> = ({
                                               </div>
                                             );
                                           })}
-                                          <div className="bg-white px-3 py-4 text-center font-semibold">{group.totalQty}</div>
-                                          <div className="bg-white px-3 py-4 text-center font-semibold">{formatMoney(group.totalRateAmount)}</div>
-                                          <div className="bg-white px-3 py-4 text-center font-semibold">{formatMoney(group.totalMrpAmount)}</div>
+                                          <div className="bg-white px-1 py-3 text-center font-semibold">
+                                            {group.totalQty}
+                                          </div>
+                                          <div className="bg-white px-1 py-3 text-center font-semibold">
+                                            {formatMoney(group.totalRateAmount)}
+                                          </div>
+                                          <div className="bg-white px-1 py-3 text-center font-semibold">
+                                            {formatMoney(group.totalMrpAmount)}
+                                          </div>
                                         </div>
                                       ))}
 
                                       {/* Totals row */}
                                       <div
-                                        className="grid gap-px bg-slate-200 text-sm font-semibold"
+                                        className="grid gap-px bg-slate-200 text-xs font-semibold"
                                         style={{
-                                          gridTemplateColumns: `48px 100px minmax(200px,1fr) 62px 100px 52px repeat(${selectedOrderGroups.allSizes.length}, 72px) 80px 108px 108px`,
+                                          gridTemplateColumns: gridCols(selectedOrderGroups.allSizes.length),
                                         }}
                                       >
                                         <div
-                                          className="bg-slate-50 px-3 py-4 text-left"
-                                          style={{ gridColumn: `1 / span ${6 + selectedOrderGroups.allSizes.length}` }}
+                                          className="bg-slate-50 px-1 py-3 text-left"
+                                          style={{
+                                            gridColumn: `1 / span ${6 + selectedOrderGroups.allSizes.length}`,
+                                          }}
                                         >
                                           Total
                                         </div>
-                                        <div className="bg-slate-50 px-3 py-4 text-center">{selectedOrderGroups.totals.totalQty}</div>
-                                        <div className="bg-slate-50 px-3 py-4 text-center">{formatMoney(selectedOrderGroups.totals.totalRateAmount)}</div>
-                                        <div className="bg-slate-50 px-3 py-4 text-center">{formatMoney(selectedOrderGroups.totals.totalMrpAmount)}</div>
+                                        <div className="bg-slate-50 px-1 py-3 text-center">
+                                          {selectedOrderGroups.totals.totalQty}
+                                        </div>
+                                        <div className="bg-slate-50 px-1 py-3 text-center">
+                                          {formatMoney(selectedOrderGroups.totals.totalRateAmount)}
+                                        </div>
+                                        <div className="bg-slate-50 px-1 py-3 text-center">
+                                          {formatMoney(selectedOrderGroups.totals.totalMrpAmount)}
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
                                 </div>
 
+                                {/* Summary footer */}
                                 <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
                                   <div className="space-y-1">
-                                    <div>Total Qty: <span className="font-semibold text-slate-900">{selectedOrderGroups.totals.totalQty}</span></div>
-                                    <div>Total Rate Amount: <span className="font-semibold text-slate-900">Rs.{formatMoney(selectedOrderGroups.totals.totalRateAmount)}</span></div>
-                                    <div>Total MRP Amount: <span className="font-semibold text-slate-900">Rs.{formatMoney(selectedOrderGroups.totals.totalMrpAmount)}</span></div>
+                                    <div>
+                                      Total Qty:{" "}
+                                      <span className="font-semibold text-slate-900">
+                                        {selectedOrderGroups.totals.totalQty}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      Total Rate Amount:{" "}
+                                      <span className="font-semibold text-slate-900">
+                                        Rs.{formatMoney(selectedOrderGroups.totals.totalRateAmount)}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      Total MRP Amount:{" "}
+                                      <span className="font-semibold text-slate-900">
+                                        Rs.{formatMoney(selectedOrderGroups.totals.totalMrpAmount)}
+                                      </span>
+                                    </div>
                                   </div>
                                   <Button
                                     type="button"
@@ -940,6 +1274,8 @@ const OrdersList: React.FC<OrdersListProps> = ({
                                     Print Invoice
                                   </Button>
                                 </div>
+                                  </>
+                                ) : null}
                               </div>
                             )}
                           </DialogContent>

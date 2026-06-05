@@ -31,7 +31,6 @@ import ManageCustomFields from "./pages/dealer/ManageCustomFields";
 import Profile from "./components/Profile";
 import GarmentSizeSettingsPage from "./pages/dealer/GarmentSizeSettingsPage";
 import CartSettingsPage from "./pages/dealer/CartSettingsPage";
-
 const queryClient = new QueryClient();
 
 const App = () => (

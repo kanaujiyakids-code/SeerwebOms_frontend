@@ -1225,7 +1225,7 @@ const TakeOrder = () => {
       <GarmentBookingPage
         dealerId={user?.id}
         title="Take Order"
-        subtitle="Create wholesale bookings with live garment cards, set ordering, and size-wise piece entry."
+        subtitle=""
       />
     );
   }

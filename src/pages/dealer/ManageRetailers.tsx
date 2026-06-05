@@ -35,7 +35,7 @@ interface RetailerFormData {
   username: string;
   name: string;
   contact_person: string;
-  store_name: string;
+  ledger_name: string;
   email: string;
   phone: string;
   address: string;
@@ -50,7 +50,7 @@ const emptyFormData: RetailerFormData = {
   username: "",
   name: "",
   contact_person: "",
-  store_name: "",
+  ledger_name: "",
   email: "",
   phone: "",
   address: "",
@@ -192,7 +192,7 @@ const ManageRetailers = () => {
         retailer.contact_person?.toLowerCase().includes(lowerQuery) ||
         retailer.email?.toLowerCase().includes(lowerQuery) ||
         retailer.phone?.toLowerCase().includes(lowerQuery) ||
-        retailer.store_name?.toLowerCase().includes(lowerQuery)
+        retailer.ledger_name?.toLowerCase().includes(lowerQuery)
     );
     setFilteredRetailers(filtered);
   };
@@ -215,7 +215,7 @@ const ManageRetailers = () => {
       username: retailer.username,
       name: retailer.name,
       contact_person: retailer.contact_person,
-      store_name: retailer.store_name,
+      ledger_name: retailer.ledger_name,
       email: retailer.email,
       phone: retailer.phone,
       address: retailer.address,
@@ -288,7 +288,7 @@ const ManageRetailers = () => {
             (!isEditing || String(r.id) !== String(currentRetailer?.id))
     );
     if (duplicateEmail) {
-      toast.error(`Email "${email}" is already registered to "${duplicateEmail.store_name}". Use a different email.`);
+      toast.error(`Email "${email}" is already registered to "${duplicateEmail.ledger_name}". Use a different email.`);
       return false;
     }
 
@@ -407,7 +407,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
     const data = retailers.map((c) => {
       const stats = retailerStats[String(c.id)] || { totalOrders: 0, totalRevenue: 0, lastOrderDate: null };
       return {
-        Username: c.username, Name: c.name, "Store Name": c.store_name,
+        Username: c.username, Name: c.name, "Store Name": c.ledger_name,
         Email: c.email, Phone: c.phone, Address: c.address,
         "Total Orders": stats.totalOrders, "Total Revenue (₹)": stats.totalRevenue.toFixed(2),
         "Last Order": stats.lastOrderDate ? new Date(stats.lastOrderDate).toLocaleDateString() : "-",
@@ -594,7 +594,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
                         };
                         return (
                           <TableRow key={retailer.id}>
-                            <TableCell className="font-medium">{retailer.store_name}</TableCell>
+                            <TableCell className="font-medium">{retailer.ledger_name}</TableCell>
                             <TableCell>
                               <div>
                                 <p>{retailer.name}</p>
@@ -720,7 +720,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
                         <Label htmlFor="store_name" className="text-sm font-medium text-gray-700 flex items-center gap-1">
                           <Store className="h-3.5 w-3.5 text-gray-400" /> Store Name <span className="text-red-500">*</span>
                         </Label>
-                        <Input id="store_name" name="store_name" value={formData.store_name} onChange={handleInputChange} placeholder="e.g. Ramesh Electronics" required />
+                        <Input id="store_name" name="store_name" value={formData.ledger_name} onChange={handleInputChange} placeholder="e.g. Ramesh Electronics" required />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="email" className="text-sm font-medium text-gray-700 flex items-center gap-1">
@@ -845,7 +845,7 @@ const handleFormSubmit = async (e: React.FormEvent) => {
             <Dialog open={isOrderHistoryDialogOpen} onOpenChange={setIsOrderHistoryDialogOpen}>
               <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                 <DialogHeader>
-                  <DialogTitle>Order History - {currentRetailer?.store_name}</DialogTitle>
+                  <DialogTitle>Order History - {currentRetailer?.ledger_name}</DialogTitle>
                 </DialogHeader>
                 <div className="py-4">
                   {retailerOrders.length > 0 ? (

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-
+import logo from "@/assets/images/react-logo.png";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -251,8 +251,8 @@ const Sidebar = ({
                 : "gap-3"
             } overflow-hidden`}
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600">
-              <Package className="h-5 w-5 text-white" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white">
+              <img src={logo} alt="" />
             </div>
 
             {!collapsed && (
